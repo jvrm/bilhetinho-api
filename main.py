@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 
 from database.connection import engine, Base
-from routes import rooms, users, notes, seed
+from routes import rooms, users, notes, seed, admin
 
 # Load environment variables
 load_dotenv()
@@ -32,7 +32,8 @@ app.add_middleware(
 app.include_router(rooms.router, tags=["Rooms"])
 app.include_router(users.router, tags=["Users"])
 app.include_router(notes.router, tags=["Notes"])
-app.include_router(seed.router, tags=["Admin"])
+app.include_router(seed.router, tags=["Seed"])
+app.include_router(admin.router, tags=["Admin"])
 
 
 @app.get("/")

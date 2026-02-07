@@ -11,6 +11,7 @@ class Room(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
     is_active = Column(Boolean, default=False)
+    event_code = Column(String(6), nullable=False, index=True)  # Link to Event
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tables = relationship("Table", back_populates="room", cascade="all, delete-orphan")
