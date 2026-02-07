@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database (if using SQLite locally)
+# Note: Commenting out to allow bilhetinho.db to be copied
+# *.db
+# *.sqlite
+# *.sqlite3
+
+# Logs
+*.log
+server.log
+
+# Scripts
+seed.py
+clear_users.py
+migrate_*.py
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
