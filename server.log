@@ -1,0 +1,50 @@
+INFO:     Started server process [10884]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:56883 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56887 - "GET /api/room/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56894 - "GET /api/room/active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56898 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56977 - "OPTIONS /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56977 - "GET /profile HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56977 - "OPTIONS /marketplace/data HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56979 - "OPTIONS /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56977 - "GET /marketplace/data HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56979 - "GET /profile HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57165 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57168 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57170 - "POST /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57172 - "POST /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57229 - "OPTIONS /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57229 - "GET /profile HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57229 - "OPTIONS /marketplace/data HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57229 - "GET /marketplace/data HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57236 - "OPTIONS /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57236 - "GET /profile HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57236 - "OPTIONS /marketplace/data HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57236 - "GET /marketplace/data HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57441 - "OPTIONS /profile HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57441 - "GET /profile HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57441 - "OPTIONS /marketplace/data HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57441 - "GET /marketplace/data HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57522 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57525 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57528 - "POST /api/notes HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:57868 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57870 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57872 - "POST /api/notes HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:57882 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57884 - "GET /api/tables/d133d449-5917-49f2-827d-89009f173198/notes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57906 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57909 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57912 - "POST /api/notes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57967 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57970 - "GET /api/tables/d133d449-5917-49f2-827d-89009f173198/notes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58007 - "POST /api/notes/78e3fc54-eac9-4e57-b0b4-280a02ef947b/accept HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58009 - "GET /api/room/9ff7e8dc-18f2-41ae-8d6a-8f549c6ea88c/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58012 - "GET /api/tables/d133d449-5917-49f2-827d-89009f173198/notes HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [10884]
