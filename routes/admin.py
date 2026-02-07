@@ -17,7 +17,7 @@ router = APIRouter()
 
 # Hardcoded admin credentials (MVP)
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "bilhetinho2024"
+ADMIN_PASSWORD = "123456"
 
 
 class AdminLogin(BaseModel):

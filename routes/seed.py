@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+import random
+import string
 
 from database.connection import get_db
 from models.room import Room
 from models.table import Table
+from models.event import Event
 
 router = APIRouter()
 
@@ -17,12 +21,32 @@ def seed_database(db: Session = Depends(get_db)):
         # Limpar dados existentes
         db.query(Table).delete()
         db.query(Room).delete()
+        db.query(Event).delete()
         db.commit()
+
+        # Generate event code
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+        # Create event
+        start = datetime.utcnow()
+        end = start + timedelta(hours=5)
+
+        event = Event(
+            code=code,
+            start_date=start,
+            end_date=end,
+            number_of_tables=10,
+            is_active=True
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
 
         # Criar sala ativa
         room = Room(
             name="Noite do Bilhetinho - Bar Central",
-            is_active=True
+            is_active=True,
+            event_code=code
         )
         db.add(room)
         db.commit()
@@ -40,13 +64,20 @@ def seed_database(db: Session = Depends(get_db)):
         return {
             "success": True,
             "message": "Banco de dados populado com sucesso!",
+            "event": {
+                "code": event.code,
+                "start_date": event.start_date.isoformat(),
+                "end_date": event.end_date.isoformat()
+            },
             "room": {
                 "id": room.id,
                 "name": room.name,
-                "is_active": room.is_active
+                "is_active": room.is_active,
+                "event_code": room.event_code
             },
             "tables_created": len(tables_created),
-            "tables": tables_created
+            "tables": tables_created,
+            "access_url": f"http://localhost:3000?code={code}"
         }
 
     except Exception as e:
