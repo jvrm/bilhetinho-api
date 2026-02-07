@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 
 from database.connection import engine, Base
-from routes import rooms, users, notes
+from routes import rooms, users, notes, seed
 
 # Load environment variables
 load_dotenv()
@@ -19,21 +19,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration
-origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-
+# CORS configuration - Allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=False,  # Must be False when using allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(rooms.router, prefix="/api", tags=["Rooms"])
-app.include_router(users.router, prefix="/api", tags=["Users"])
-app.include_router(notes.router, prefix="/api", tags=["Notes"])
+# Include routers (no /api prefix - routes are at root level)
+app.include_router(rooms.router, tags=["Rooms"])
+app.include_router(users.router, tags=["Users"])
+app.include_router(notes.router, tags=["Notes"])
+app.include_router(seed.router, tags=["Admin"])
 
 
 @app.get("/")
