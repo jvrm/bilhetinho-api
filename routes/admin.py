@@ -12,12 +12,10 @@ from database.connection import get_db
 from models.event import Event
 from models.room import Room
 from models.table import Table
+from models.admin_user import AdminUser
+from models.establishment import Establishment
 
 router = APIRouter()
-
-# Hardcoded admin credentials (MVP)
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "123456"
 
 
 class AdminLogin(BaseModel):
@@ -35,21 +33,28 @@ def generate_event_code(db: Session) -> str:
 
 
 @router.post("/admin/login")
-def admin_login(credentials: AdminLogin):
+def admin_login(credentials: AdminLogin, db: Session = Depends(get_db)):
     """
-    Admin login endpoint (hardcoded for MVP)
+    Admin login endpoint
+    Validates against AdminUser table and returns establishment info
+    """
+    admin_user = db.query(AdminUser).filter(AdminUser.username == credentials.username).first()
 
-    Default credentials:
-    - username: admin
-    - password: bilhetinho2024
-    """
-    if credentials.username == ADMIN_USERNAME and credentials.password == ADMIN_PASSWORD:
-        return {
-            "success": True,
-            "token": "admin-session-token",
-            "message": "Login successful"
-        }
-    raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not admin_user or not admin_user.verify_password(credentials.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Get establishment info
+    establishment = db.query(Establishment).filter(Establishment.id == admin_user.establishment_id).first()
+
+    return {
+        "success": True,
+        "token": f"admin-{admin_user.id}",
+        "role": "admin",
+        "admin_id": admin_user.id,
+        "establishment_id": admin_user.establishment_id,
+        "establishment_name": establishment.name if establishment else "Unknown",
+        "message": "Login successful"
+    }
 
 
 @router.post("/admin/events")

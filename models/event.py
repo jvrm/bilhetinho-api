@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Boolean, Integer
+from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey
 from datetime import datetime
 import uuid
 from database.connection import Base
@@ -15,6 +15,7 @@ class Event(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     code = Column(String(6), unique=True, nullable=False, index=True)
+    establishment_id = Column(String, ForeignKey("establishments.id"), nullable=True)  # Nullable for backward compatibility
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=False)
     number_of_tables = Column(Integer, nullable=False)

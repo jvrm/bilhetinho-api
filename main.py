@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 
 from database.connection import engine, Base
-from routes import rooms, users, notes, seed, admin
+from routes import rooms, users, notes, seed, admin, master
 
 # Load environment variables
 load_dotenv()
@@ -34,6 +34,7 @@ app.include_router(users.router, tags=["Users"])
 app.include_router(notes.router, tags=["Notes"])
 app.include_router(seed.router, tags=["Seed"])
 app.include_router(admin.router, tags=["Admin"])
+app.include_router(master.router, tags=["Master"])
 
 
 @app.get("/")
@@ -51,5 +52,6 @@ def health_check():
 if __name__ == "__main__":
     import uvicorn
     host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", 8000))
+    # Local development uses port 8001, production uses 8000
+    port = int(os.getenv("API_PORT", 8001))
     uvicorn.run("main:app", host=host, port=port, reload=True)
