@@ -19,13 +19,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration - Allow all origins
+# CORS configuration - Restrict to specific origins for security
+allowed_origins = [
+    "https://bilhetinho.vercel.app",  # Production
+    "http://localhost:3001",           # Local development frontend
+    "http://localhost:3000",           # Alternative local dev port
+]
+
+# In development, allow localhost with any port
+if os.getenv("ENVIRONMENT") == "development":
+    allowed_origins.append("http://localhost:*")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins
-    allow_credentials=False,  # Must be False when using allow_origins=["*"]
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=True,  # Enable credentials (cookies, auth headers)
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # Specific methods only
+    allow_headers=["Content-Type", "Authorization"],  # Specific headers only
 )
 
 # Include routers (no /api prefix - routes are at root level)

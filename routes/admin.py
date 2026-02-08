@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
 from datetime import datetime
 import random
 import string
 import qrcode
 import io
 import base64
+import jwt
 
 from database.connection import get_db
 from models.event import Event
@@ -14,6 +16,7 @@ from models.room import Room
 from models.table import Table
 from models.admin_user import AdminUser
 from models.establishment import Establishment
+from utils.auth import create_admin_token, verify_admin_token
 
 router = APIRouter()
 
@@ -21,6 +24,48 @@ router = APIRouter()
 class AdminLogin(BaseModel):
     username: str
     password: str
+
+
+def get_current_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> AdminUser:
+    """
+    Dependency to verify JWT admin token and return authenticated admin user
+    Validates token signature, expiration, and user existence
+    Ensures only authenticated admins with valid tokens can access protected routes
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+
+    # Remove "Bearer " prefix if present
+    token = authorization.replace("Bearer ", "").strip()
+
+    try:
+        # Verify JWT token and extract payload
+        payload = verify_admin_token(token)
+
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid token type")
+
+        admin_id = payload.get("admin_id")
+        establishment_id = payload.get("establishment_id")
+
+        # Verify admin exists in database
+        admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+
+        if not admin:
+            raise HTTPException(status_code=401, detail="Admin user not found")
+
+        # Double-check establishment matches (security)
+        if admin.establishment_id != establishment_id:
+            raise HTTPException(status_code=401, detail="Token establishment mismatch")
+
+        return admin
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired - Please login again")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 
 def generate_event_code(db: Session) -> str:
@@ -35,8 +80,9 @@ def generate_event_code(db: Session) -> str:
 @router.post("/admin/login")
 def admin_login(credentials: AdminLogin, db: Session = Depends(get_db)):
     """
-    Admin login endpoint
-    Validates against AdminUser table and returns establishment info
+    Admin login endpoint with JWT token generation
+    Validates credentials and returns a signed JWT token that expires in 8 hours
+    Token includes admin_id and establishment_id for security validation
     """
     admin_user = db.query(AdminUser).filter(AdminUser.username == credentials.username).first()
 
@@ -46,9 +92,12 @@ def admin_login(credentials: AdminLogin, db: Session = Depends(get_db)):
     # Get establishment info
     establishment = db.query(Establishment).filter(Establishment.id == admin_user.establishment_id).first()
 
+    # Generate JWT token with expiration
+    token = create_admin_token(admin_user.id, admin_user.establishment_id)
+
     return {
         "success": True,
-        "token": f"admin-{admin_user.id}",
+        "token": token,  # JWT token with 8-hour expiration
         "role": "admin",
         "admin_id": admin_user.id,
         "establishment_id": admin_user.establishment_id,
@@ -62,13 +111,15 @@ def create_event(
     start_date: str,
     end_date: str,
     number_of_tables: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin)
 ):
     """
     Create a new event with QR code
-
-    Only one event can be active at a time.
-    Automatically creates a room and tables for the event.
+    Only authenticated admins can create events
+    Events are automatically linked to the admin's establishment
+    Only one event per establishment can be active at a time
+    Automatically creates a room and tables for the event
     """
     # Parse dates
     try:
@@ -85,8 +136,11 @@ def create_event(
     if number_of_tables < 1 or number_of_tables > 100:
         raise HTTPException(400, "Number of tables must be between 1 and 100")
 
-    # Deactivate existing active events
-    db.query(Event).filter(Event.is_active == True).update({"is_active": False})
+    # Deactivate existing active events FOR THIS ESTABLISHMENT ONLY
+    db.query(Event).filter(
+        Event.is_active == True,
+        Event.establishment_id == admin.establishment_id
+    ).update({"is_active": False})
 
     # Generate unique code
     code = generate_event_code(db)
@@ -106,9 +160,10 @@ def create_event(
     qr_base64 = base64.b64encode(buffer.getvalue()).decode()
     qr_data_uri = f"data:image/png;base64,{qr_base64}"
 
-    # Create event
+    # Create event LINKED TO ESTABLISHMENT
     event = Event(
         code=code,
+        establishment_id=admin.establishment_id,  # ✅ LINK TO ESTABLISHMENT
         start_date=start,
         end_date=end,
         number_of_tables=number_of_tables,
@@ -151,11 +206,19 @@ def create_event(
 
 
 @router.get("/admin/events")
-def list_events(db: Session = Depends(get_db)):
+def list_events(
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin)
+):
     """
-    List all events ordered by creation date (newest first)
+    List events for authenticated admin's establishment only
+    Ordered by creation date (newest first)
+    Prevents cross-establishment data access
     """
-    events = db.query(Event).order_by(Event.created_at.desc()).all()
+    # Filter by establishment - CRITICAL SECURITY CHECK
+    events = db.query(Event).filter(
+        Event.establishment_id == admin.establishment_id
+    ).order_by(Event.created_at.desc()).all()
 
     now = datetime.utcnow()
 
@@ -176,14 +239,26 @@ def list_events(db: Session = Depends(get_db)):
 
 
 @router.post("/admin/events/{event_id}/deactivate")
-def deactivate_event(event_id: str, db: Session = Depends(get_db)):
+def deactivate_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin)
+):
     """
     Deactivate an event and its associated room
+    Only the admin from the event's establishment can deactivate it
     This will immediately kick out all users
     """
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(404, "Event not found")
+
+    # CRITICAL SECURITY CHECK: Verify event belongs to admin's establishment
+    if event.establishment_id != admin.establishment_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied - You can only deactivate events from your establishment"
+        )
 
     # Deactivate event
     event.is_active = False

@@ -2,23 +2,26 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+import os
+import jwt
 
 from database.connection import get_db
 from models.establishment import Establishment
 from models.admin_user import AdminUser
 from models.event import Event
+from utils.auth import create_master_token, verify_master_token
 
 router = APIRouter()
 
-# Hardcoded master credentials (MVP)
-MASTER_USERNAME = "master"
-MASTER_PASSWORD = "123456"  # Change this in production!
-MASTER_TOKEN = "master-session-token"
+# Master credentials from environment variables for security
+MASTER_USERNAME = os.getenv("MASTER_USERNAME", "master")
+MASTER_PASSWORD = os.getenv("MASTER_PASSWORD", "123456")
 
 
-def verify_master_token(authorization: Optional[str] = Header(None)):
+def verify_master_token_dependency(authorization: Optional[str] = Header(None)):
     """
-    Dependency to verify master token in requests
+    Dependency to verify JWT master token in requests
+    Validates token signature and expiration
     Ensures only authenticated master can access protected routes
     """
     if not authorization:
@@ -27,10 +30,19 @@ def verify_master_token(authorization: Optional[str] = Header(None)):
     # Remove "Bearer " prefix if present
     token = authorization.replace("Bearer ", "").strip()
 
-    if token != MASTER_TOKEN:
-        raise HTTPException(status_code=403, detail="Invalid master token - Access denied")
+    try:
+        # Verify JWT token
+        if not verify_master_token(token):
+            raise HTTPException(status_code=403, detail="Invalid master token - Access denied")
 
-    return token
+        return token
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired - Please login again")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Invalid master token")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
 
 class MasterLogin(BaseModel):
@@ -64,15 +76,19 @@ class AdminPasswordUpdate(BaseModel):
 @router.post("/master/login")
 def master_login(credentials: MasterLogin):
     """
-    Master login endpoint (hardcoded for MVP)
-    Returns a token and role for authentication
+    Master login endpoint with JWT token generation
+    Validates credentials from environment variables
+    Returns a signed JWT token that expires in 8 hours
     """
     if credentials.username != MASTER_USERNAME or credentials.password != MASTER_PASSWORD:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    # Generate JWT token with expiration
+    token = create_master_token()
+
     return {
         "success": True,
-        "token": "master-session-token",
+        "token": token,  # JWT token with 8-hour expiration
         "role": "master",
         "message": "Master login successful"
     }
@@ -82,7 +98,7 @@ def master_login(credentials: MasterLogin):
 def create_establishment(
     establishment: EstablishmentCreate,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Create a new establishment
@@ -106,7 +122,7 @@ def create_establishment(
 @router.get("/master/establishments")
 def list_establishments(
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     List all establishments with admin and event counts
@@ -132,7 +148,7 @@ def list_establishments(
 def get_establishment(
     establishment_id: str,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Get a single establishment with detailed stats
@@ -163,7 +179,7 @@ def update_establishment(
     establishment_id: str,
     data: EstablishmentUpdate,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Update establishment name
@@ -191,7 +207,7 @@ def update_establishment(
 def delete_establishment(
     establishment_id: str,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Delete establishment and all associated data (admin users, events, rooms, tables, users, notes)
@@ -243,7 +259,7 @@ def delete_establishment(
 def create_admin_user(
     admin: AdminUserCreate,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Create a new admin user for an establishment
@@ -285,7 +301,7 @@ def create_admin_user(
 def list_admin_users(
     establishment_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     List all admin users with event counts, optionally filtered by establishment
@@ -319,7 +335,7 @@ def list_admin_users(
 def get_admin_user(
     admin_id: str,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Get a single admin user with detailed info
@@ -350,7 +366,7 @@ def update_admin_user(
     admin_id: str,
     data: AdminUserUpdate,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Update admin user (username and/or establishment)
@@ -401,7 +417,7 @@ def update_admin_password(
     admin_id: str,
     data: AdminPasswordUpdate,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Update admin user password
@@ -424,7 +440,7 @@ def update_admin_password(
 def delete_admin_user(
     admin_id: str,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     Delete admin user
@@ -449,7 +465,7 @@ def delete_admin_user(
 def list_all_events(
     establishment_id: Optional[str] = None,
     db: Session = Depends(get_db),
-    token: str = Depends(verify_master_token)
+    token: str = Depends(verify_master_token_dependency)
 ):
     """
     List all events across all establishments
