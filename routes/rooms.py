@@ -22,6 +22,9 @@ def get_room_tables(room_id: str, db: Session = Depends(get_db)):
     if not room:
         raise HTTPException(status_code=404, detail="Sala não encontrada")
 
+    if not room.is_active:
+        raise HTTPException(status_code=403, detail="Evento foi encerrado pelo administrador")
+
     tables = db.query(Table).filter(Table.room_id == room_id).order_by(Table.number).all()
     return tables
 

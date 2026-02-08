@@ -13,11 +13,18 @@ MAX_NOTES_PER_USER = int(os.getenv("MAX_NOTES_PER_USER", 10))
 
 @router.post("/notes", response_model=NoteResponse)
 def create_note(note: NoteCreate, db: Session = Depends(get_db)):
+    from models.room import Room
+
     from_table = db.query(Table).filter(Table.id == note.from_table_id).first()
     to_table = db.query(Table).filter(Table.id == note.to_table_id).first()
 
     if not from_table or not to_table:
         raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    # Check if room is still active
+    room = db.query(Room).filter(Room.id == from_table.room_id).first()
+    if not room or not room.is_active:
+        raise HTTPException(status_code=403, detail="Evento foi encerrado pelo administrador")
 
     if from_table.room_id != to_table.room_id:
         raise HTTPException(status_code=400, detail="Mesas precisam estar na mesma sala")

@@ -77,8 +77,8 @@ def create_event(
         raise HTTPException(400, "Start date must be before end date")
 
     # Validate table count
-    if number_of_tables < 1 or number_of_tables > 50:
-        raise HTTPException(400, "Number of tables must be between 1 and 50")
+    if number_of_tables < 1 or number_of_tables > 100:
+        raise HTTPException(400, "Number of tables must be between 1 and 100")
 
     # Deactivate existing active events
     db.query(Event).filter(Event.is_active == True).update({"is_active": False})
@@ -162,10 +162,42 @@ def list_events(db: Session = Depends(get_db)):
                 "start_date": e.start_date.isoformat(),
                 "end_date": e.end_date.isoformat(),
                 "status": "active" if (e.is_active and e.start_date <= now <= e.end_date) else "expired",
-                "number_of_tables": e.number_of_tables
+                "number_of_tables": e.number_of_tables,
+                "qr_code_data": e.qr_code_data
             }
             for e in events
         ]
+    }
+
+
+@router.post("/admin/events/{event_id}/deactivate")
+def deactivate_event(event_id: str, db: Session = Depends(get_db)):
+    """
+    Deactivate an event and its associated room
+    This will immediately kick out all users
+    """
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    # Deactivate event
+    event.is_active = False
+
+    # Deactivate associated room
+    room = db.query(Room).filter(Room.event_code == event.code).first()
+    if room:
+        room.is_active = False
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Event {event.code} deactivated successfully",
+        "event": {
+            "id": event.id,
+            "code": event.code,
+            "is_active": False
+        }
     }
 
 

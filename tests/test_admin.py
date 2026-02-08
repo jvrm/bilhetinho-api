@@ -131,7 +131,7 @@ class TestCreateEvent:
         response = client.post("/admin/events", params={
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
-            "number_of_tables": 51
+            "number_of_tables": 101
         })
 
         assert response.status_code == 400
