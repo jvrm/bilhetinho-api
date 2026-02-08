@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -13,6 +13,24 @@ router = APIRouter()
 # Hardcoded master credentials (MVP)
 MASTER_USERNAME = "master"
 MASTER_PASSWORD = "123456"  # Change this in production!
+MASTER_TOKEN = "master-session-token"
+
+
+def verify_master_token(authorization: Optional[str] = Header(None)):
+    """
+    Dependency to verify master token in requests
+    Ensures only authenticated master can access protected routes
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+
+    # Remove "Bearer " prefix if present
+    token = authorization.replace("Bearer ", "").strip()
+
+    if token != MASTER_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid master token - Access denied")
+
+    return token
 
 
 class MasterLogin(BaseModel):
@@ -24,10 +42,23 @@ class EstablishmentCreate(BaseModel):
     name: str
 
 
+class EstablishmentUpdate(BaseModel):
+    name: str
+
+
 class AdminUserCreate(BaseModel):
     username: str
     password: str
     establishment_id: str
+
+
+class AdminUserUpdate(BaseModel):
+    username: Optional[str] = None
+    establishment_id: Optional[str] = None
+
+
+class AdminPasswordUpdate(BaseModel):
+    password: str
 
 
 @router.post("/master/login")
@@ -48,7 +79,11 @@ def master_login(credentials: MasterLogin):
 
 
 @router.post("/master/establishments")
-def create_establishment(establishment: EstablishmentCreate, db: Session = Depends(get_db)):
+def create_establishment(
+    establishment: EstablishmentCreate,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
     """
     Create a new establishment
     Only accessible by master account
@@ -69,9 +104,12 @@ def create_establishment(establishment: EstablishmentCreate, db: Session = Depen
 
 
 @router.get("/master/establishments")
-def list_establishments(db: Session = Depends(get_db)):
+def list_establishments(
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
     """
-    List all establishments
+    List all establishments with admin and event counts
     Only accessible by master account
     """
     establishments = db.query(Establishment).order_by(Establishment.created_at.desc()).all()
@@ -81,15 +119,132 @@ def list_establishments(db: Session = Depends(get_db)):
             {
                 "id": e.id,
                 "name": e.name,
-                "created_at": e.created_at.isoformat()
+                "created_at": e.created_at.isoformat(),
+                "admin_count": db.query(AdminUser).filter(AdminUser.establishment_id == e.id).count(),
+                "event_count": db.query(Event).filter(Event.establishment_id == e.id).count()
             }
             for e in establishments
         ]
     }
 
 
+@router.get("/master/establishments/{establishment_id}")
+def get_establishment(
+    establishment_id: str,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
+    """
+    Get a single establishment with detailed stats
+    Only accessible by master account
+    """
+    establishment = db.query(Establishment).filter(Establishment.id == establishment_id).first()
+    if not establishment:
+        raise HTTPException(404, "Establishment not found")
+
+    admins = db.query(AdminUser).filter(AdminUser.establishment_id == establishment_id).all()
+    events = db.query(Event).filter(Event.establishment_id == establishment_id).all()
+
+    return {
+        "establishment": {
+            "id": establishment.id,
+            "name": establishment.name,
+            "created_at": establishment.created_at.isoformat(),
+            "admin_count": len(admins),
+            "event_count": len(events),
+            "admins": [{"id": a.id, "username": a.username} for a in admins],
+            "events": [{"id": e.id, "code": e.code, "status": "active" if e.is_active else "inactive"} for e in events]
+        }
+    }
+
+
+@router.put("/master/establishments/{establishment_id}")
+def update_establishment(
+    establishment_id: str,
+    data: EstablishmentUpdate,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
+    """
+    Update establishment name
+    Only accessible by master account
+    """
+    establishment = db.query(Establishment).filter(Establishment.id == establishment_id).first()
+    if not establishment:
+        raise HTTPException(404, "Establishment not found")
+
+    establishment.name = data.name
+    db.commit()
+    db.refresh(establishment)
+
+    return {
+        "success": True,
+        "establishment": {
+            "id": establishment.id,
+            "name": establishment.name,
+            "created_at": establishment.created_at.isoformat()
+        }
+    }
+
+
+@router.delete("/master/establishments/{establishment_id}")
+def delete_establishment(
+    establishment_id: str,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
+    """
+    Delete establishment and all associated data (admin users, events, rooms, tables, users, notes)
+    Only accessible by master account
+    """
+    from models.room import Room
+    from models.table import Table
+    from models.user import User
+    from models.note import Note
+
+    establishment = db.query(Establishment).filter(Establishment.id == establishment_id).first()
+    if not establishment:
+        raise HTTPException(404, "Establishment not found")
+
+    # Get all events for this establishment
+    events = db.query(Event).filter(Event.establishment_id == establishment_id).all()
+    event_codes = [e.code for e in events]
+
+    # Delete notes -> users -> tables -> rooms for each event
+    for code in event_codes:
+        rooms = db.query(Room).filter(Room.event_code == code).all()
+        for room in rooms:
+            # Delete notes
+            db.query(Note).filter(Note.room_id == room.id).delete()
+            # Delete users
+            db.query(User).filter(User.room_id == room.id).delete()
+            # Delete tables
+            db.query(Table).filter(Table.room_id == room.id).delete()
+        # Delete rooms
+        db.query(Room).filter(Room.event_code == code).delete()
+
+    # Delete events
+    db.query(Event).filter(Event.establishment_id == establishment_id).delete()
+
+    # Delete admin users
+    db.query(AdminUser).filter(AdminUser.establishment_id == establishment_id).delete()
+
+    # Delete establishment
+    db.delete(establishment)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Establishment '{establishment.name}' and all associated data deleted successfully"
+    }
+
+
 @router.post("/master/admin-users")
-def create_admin_user(admin: AdminUserCreate, db: Session = Depends(get_db)):
+def create_admin_user(
+    admin: AdminUserCreate,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
     """
     Create a new admin user for an establishment
     Only accessible by master account
@@ -127,9 +282,13 @@ def create_admin_user(admin: AdminUserCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/master/admin-users")
-def list_admin_users(establishment_id: Optional[str] = None, db: Session = Depends(get_db)):
+def list_admin_users(
+    establishment_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
     """
-    List all admin users, optionally filtered by establishment
+    List all admin users with event counts, optionally filtered by establishment
     Only accessible by master account
     """
     query = db.query(AdminUser, Establishment).join(
@@ -148,15 +307,150 @@ def list_admin_users(establishment_id: Optional[str] = None, db: Session = Depen
                 "username": admin.username,
                 "establishment_id": admin.establishment_id,
                 "establishment_name": est.name,
-                "created_at": admin.created_at.isoformat()
+                "created_at": admin.created_at.isoformat(),
+                "event_count": db.query(Event).filter(Event.establishment_id == admin.establishment_id).count()
             }
             for admin, est in results
         ]
     }
 
 
+@router.get("/master/admin-users/{admin_id}")
+def get_admin_user(
+    admin_id: str,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
+    """
+    Get a single admin user with detailed info
+    Only accessible by master account
+    """
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not admin:
+        raise HTTPException(404, "Admin user not found")
+
+    establishment = db.query(Establishment).filter(Establishment.id == admin.establishment_id).first()
+    events = db.query(Event).filter(Event.establishment_id == admin.establishment_id).all()
+
+    return {
+        "admin_user": {
+            "id": admin.id,
+            "username": admin.username,
+            "establishment_id": admin.establishment_id,
+            "establishment_name": establishment.name if establishment else "N/A",
+            "created_at": admin.created_at.isoformat(),
+            "event_count": len(events),
+            "events": [{"id": e.id, "code": e.code, "status": "active" if e.is_active else "inactive"} for e in events]
+        }
+    }
+
+
+@router.put("/master/admin-users/{admin_id}")
+def update_admin_user(
+    admin_id: str,
+    data: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
+    """
+    Update admin user (username and/or establishment)
+    Only accessible by master account
+    """
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not admin:
+        raise HTTPException(404, "Admin user not found")
+
+    # Check if new username already exists (if changing username)
+    if data.username and data.username != admin.username:
+        existing = db.query(AdminUser).filter(AdminUser.username == data.username).first()
+        if existing:
+            raise HTTPException(400, "Username already exists")
+        admin.username = data.username
+
+    # Check if new establishment exists (if changing establishment)
+    if data.establishment_id and data.establishment_id != admin.establishment_id:
+        establishment = db.query(Establishment).filter(Establishment.id == data.establishment_id).first()
+        if not establishment:
+            raise HTTPException(404, "Establishment not found")
+
+        # Move all events to new establishment
+        db.query(Event).filter(Event.establishment_id == admin.establishment_id).update(
+            {"establishment_id": data.establishment_id}
+        )
+        admin.establishment_id = data.establishment_id
+
+    db.commit()
+    db.refresh(admin)
+
+    establishment = db.query(Establishment).filter(Establishment.id == admin.establishment_id).first()
+
+    return {
+        "success": True,
+        "admin_user": {
+            "id": admin.id,
+            "username": admin.username,
+            "establishment_id": admin.establishment_id,
+            "establishment_name": establishment.name if establishment else "N/A",
+            "created_at": admin.created_at.isoformat()
+        }
+    }
+
+
+@router.put("/master/admin-users/{admin_id}/password")
+def update_admin_password(
+    admin_id: str,
+    data: AdminPasswordUpdate,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
+    """
+    Update admin user password
+    Only accessible by master account
+    """
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not admin:
+        raise HTTPException(404, "Admin user not found")
+
+    admin.password_hash = AdminUser.hash_password(data.password)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Password updated successfully"
+    }
+
+
+@router.delete("/master/admin-users/{admin_id}")
+def delete_admin_user(
+    admin_id: str,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
+    """
+    Delete admin user
+    Note: Associated events remain but without an admin owner
+    Only accessible by master account
+    """
+    admin = db.query(AdminUser).filter(AdminUser.id == admin_id).first()
+    if not admin:
+        raise HTTPException(404, "Admin user not found")
+
+    username = admin.username
+    db.delete(admin)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Admin user '{username}' deleted successfully"
+    }
+
+
 @router.get("/master/events")
-def list_all_events(establishment_id: Optional[str] = None, db: Session = Depends(get_db)):
+def list_all_events(
+    establishment_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_master_token)
+):
     """
     List all events across all establishments
     Optionally filter by establishment
